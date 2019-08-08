@@ -1,0 +1,6 @@
+[submodule "examples/simulator/riscv-compliance"]
+	path = examples/simulator/riscv-compliance
+	url = https://github.com/riscv/riscv-compliance
+[submodule "examples/simulator/ada-bfd"]
+	path = examples/simulator/ada-bfd
+	url = https://github.com/stcarrez/ada-bfd/
