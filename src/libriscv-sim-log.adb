@@ -62,6 +62,15 @@ package body LibRISCV.Sim.Log is
          elsif Substr = "elf" then
             Elf := Enable;
          else
+            Put_Line ("Log topics:");
+            Put_Line (" - console");
+            Put_Line (" - info");
+            Put_Line (" - decode");
+            Put_Line (" - exec");
+            Put_Line (" - except");
+            Put_Line (" - mem");
+            Put_Line (" - csr");
+            Put_Line (" - elf");
             return False;
          end if;
          return True;

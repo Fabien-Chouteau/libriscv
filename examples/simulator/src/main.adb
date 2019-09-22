@@ -34,12 +34,14 @@ with Ada.Command_Line;
 with GNAT.Command_Line;         use GNAT.Command_Line;
 with GNAT.Strings;              use GNAT.Strings;
 
+with LibRISCV.Sim.Hart;
 with LibRISCV.Sim.Platform;
 with LibRISCV.Sim.Memory_Bus;
 with LibRISCV.Loader;
 with LibRISCV.Signature;
 with LibRISCV.Sim.Shutdown;
 with LibRISCV.Sim.Log;
+with LibRISCV.Sim.GDB_Remote_Target;
 use LibRISCV;
 
 procedure Main is
@@ -48,12 +50,18 @@ procedure Main is
    Signature_Path : aliased String_Access := null;
    Log_Enable     : aliased String_Access := null;
    HTIF_Enable    : aliased Boolean := False;
+   GDB_Enable     : aliased Boolean := False;
 
-   SOC : Sim.Platform.Instance (Hart_Count => 1);
-   Bus : Sim.Memory_Bus.Instance (RAM_Base => 16#8000_0000#,
-                              RAM_Size => 256 * 1024);
+   SOC : aliased Sim.Platform.Instance (Hart_Count => 1);
+   Bus : aliased Sim.Memory_Bus.Instance (RAM_Base => 16#8000_0000#,
+                                          RAM_Size => 256 * 1024);
+
+   GDB_Target : Sim.GDB_Remote_Target.Instance (SOC'Unchecked_Access,
+                                                Bus'Unchecked_Access,
+                                                256);
 
    use type Sim.Platform.State_Kind;
+   use type Sim.Hart.State_Kind;
 
 begin
 
@@ -74,6 +82,11 @@ begin
         (Config, HTIF_Enable'Access, "-t",
          Long_Switch => "--htif",
          Help        => "Enable the Host Target interface");
+
+      Define_Switch
+        (Config, GDB_Enable'Access, "-g",
+         Long_Switch => "--gdb",
+         Help        => "Enable the GDB remote interface (localhost:1234)");
 
       Set_Usage
         (Config,
@@ -116,9 +129,32 @@ begin
       end;
    end loop;
 
+
    SOC.Reset;
+
+   if GDB_Enable then
+      GDB_Target.Start_Server;
+   else
+      SOC.Resume;
+   end if;
+
    loop
+
+      if GDB_Enable then
+         GDB_Target.Poll;
+      end if;
+
       SOC.Cycle (Bus);
+
+      if SOC.Get_Hart (1).State = Sim.Hart.Debug_Halt then
+         case SOC.Get_Hart (1).Halt_Source is
+            when Sim.Hart.None => null;
+            when Sim.Hart.Single_Step => GDB_Target.Halted_On_Single_Step;
+            when Sim.Hart.Breakpoint => GDB_Target.Halted_On_Breakpoint;
+            when Sim.Hart.Watchpoint => null;
+         end case;
+      end if;
+
       exit when SOC.State = Sim.Platform.Reset or else Sim.Shutdown.Requested;
    end loop;
 

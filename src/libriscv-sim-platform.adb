@@ -65,6 +65,26 @@ package body LibRISCV.Sim.Platform is
       return Running;
    end State;
 
+   ------------
+   -- Resume --
+   ------------
+
+   procedure Resume (This : in out Instance) is
+   begin
+      for H of This.Harts loop
+         H.Resume;
+      end loop;
+   end Resume;
+
+   --------------
+   -- Get_Hart --
+   --------------
+
+   function Get_Hart (This : in out Instance;
+                      Id   : Hart_Id)
+                      return not null Hart.Ptr
+   is (This.Harts (Id)'Unchecked_Access);
+
    ----------
    -- Dump --
    ----------

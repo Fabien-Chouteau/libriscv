@@ -17,6 +17,7 @@ project RISCV_Sim extends "../../libriscv.gpr" is
                                 "-gnaty3aAbcefhiklmnprt", "-gnatyO",
                                 "-gnatyM120",
                                 "-gnatwa",  -- All warnings
+                                "-gnatwC",  -- Suppress warnings on conditionals
                                 "-O3",
                                 "-gnatp",
                                 "-ffunction-sections", 

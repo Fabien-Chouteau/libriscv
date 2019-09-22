@@ -44,7 +44,6 @@ package body LibRISCV.Sim.Hart is
    begin
       This.Privilege := Machine;
       This.PC.U := 16#80000000#;
-      This.State := Reset;
       This.GPR := (others => (U => 0, others => <>));
       This.CSRs (CSR.mhartid).U := 0;
       This.CSRs (CSR.mtvec).U := 0;
@@ -61,6 +60,10 @@ package body LibRISCV.Sim.Hart is
       Fetch_Success : Boolean := False;
    begin
 
+      if This.State = Debug_Halt then
+         return;
+      end if;
+
       This.Next_PC.U := This.PC.U + 4;
 
       This.Fetch (Bus, Raw, Fetch_Success);
@@ -70,6 +73,11 @@ package body LibRISCV.Sim.Hart is
       end if;
 
       This.PC := This.Next_PC;
+
+      if This.State = Single_Step then
+         This.Halt_Src := Single_Step;
+         This.State := Debug_Halt;
+      end if;
 
    end Cycle;
 
@@ -153,6 +161,141 @@ package body LibRISCV.Sim.Hart is
    function State (This : Instance) return State_Kind
    is (This.State);
 
+   -----------------
+   -- Halt_Source --
+   -----------------
+
+   function Halt_Source (This : in out Instance) return Halt_Source_Kind is
+      Res : constant Halt_Source_Kind := This.Halt_Src;
+   begin
+      This.Halt_Src := None;
+      return Res;
+   end Halt_Source;
+
+   ----------
+   -- Halt --
+   ----------
+
+   procedure Halt (This : in out Instance) is
+   begin
+      This.State := Debug_Halt;
+   end Halt;
+
+   ------------
+   -- Resume --
+   ------------
+
+   procedure Resume (This : in out Instance) is
+   begin
+      This.State := Running;
+   end Resume;
+
+   -----------------
+   -- Single_Step --
+   -----------------
+
+   procedure Single_Step (This : in out Instance) is
+   begin
+      This.State := Single_Step;
+   end Single_Step;
+
+   --------------
+   -- Read_GPR --
+   --------------
+
+   function Read_GPR (This : Instance; Id : GPR_Id) return Register
+   is (This.GPR (Id));
+
+   -------------
+   -- Read_PC --
+   -------------
+
+   function Read_PC (This : Instance) return Register
+   is (This.PC);
+
+   --------------
+   -- Write_PC --
+   --------------
+
+   procedure Write_PC (This : in out Instance; Addr : Register) is
+   begin
+      This.PC := Addr;
+   end Write_PC;
+
+   ---------------------------
+   -- Set_Debugger_Attached --
+   ---------------------------
+
+   procedure Set_Debugger_Attached (This     : in out Instance;
+                                    Attached : Boolean := True)
+   is
+   begin
+      This.Debugger_Attached := Attached;
+   end Set_Debugger_Attached;
+
+   --------------------
+   -- Debug_Read_CSR --
+   --------------------
+
+   function Debug_Read_CSR (This : Instance; Id : CSR.Id) return Register is
+   begin
+      return This.CSRs (CSR.To_Name (Id));
+   end Debug_Read_CSR;
+
+   --------------------
+   -- Add_Breakpoint --
+   --------------------
+
+   procedure Add_Breakpoint (This    : in out Instance;
+                             Addr    :        Address;
+                             Success :    out Boolean)
+   is
+   begin
+      for Index in This.Breakpoints'Range loop
+         if not This.Breakpoints (Index).Enabled then
+            This.Breakpoints (Index).Enabled := True;
+            This.Breakpoints (Index).Addr := Addr;
+            Success := True;
+         end if;
+      end loop;
+      Success := False;
+   end Add_Breakpoint;
+
+   -----------------------
+   -- Remove_Breakpoint --
+   -----------------------
+
+   procedure Remove_Breakpoint (This    : in out Instance;
+                                Addr    :        Address;
+                                Success :    out Boolean)
+   is
+   begin
+      for Index in This.Breakpoints'Range loop
+         if This.Breakpoints (Index).Enabled
+           and then
+             This.Breakpoints (Index).Addr = Addr
+         then
+            This.Breakpoints (Index).Enabled := False;
+            Success := True;
+         end if;
+      end loop;
+      Success := False;
+   end Remove_Breakpoint;
+
+   ---------------
+   -- Write_GPR --
+   ---------------
+
+   procedure Write_GPR (This  : in out Instance;
+                        Id    :        GPR_Id;
+                        Value :        Register)
+   is
+   begin
+      if Id /= 0 then
+         This.GPR (Id) := Value;
+      end if;
+   end Write_GPR;
+
    ----------
    -- Dump --
    ----------
@@ -190,6 +333,22 @@ package body LibRISCV.Sim.Hart is
          Success := False;
          return;
       end if;
+
+      for Index in This.Breakpoints'Range loop
+         if This.Breakpoints (Index).Enabled
+           and then
+             This.Breakpoints (Index).Addr = This.PC.U
+         then
+            if This.Debugger_Attached then
+               This.State := Debug_Halt;
+               This.Halt_Src := Breakpoint;
+            else
+               This.Raise_Exception (Except.Breakpoint);
+            end if;
+            Success := True;
+            return;
+         end if;
+      end loop;
 
       Bus.Load_W (This.PC.U, Raw_Insn, Mem_Access);
 
@@ -914,7 +1073,13 @@ package body LibRISCV.Sim.Hart is
 
    procedure Exec_EBREAK (This : in out Instance) is
    begin
-      This.Raise_Exception (Except.Breakpoint);
+      if This.Debugger_Attached then
+         This.State := Debug_Halt;
+         This.Halt_Src := Breakpoint;
+         This.Next_PC := This.PC;
+      else
+         This.Raise_Exception (Except.Breakpoint);
+      end if;
    end Exec_EBREAK;
 
    ----------------

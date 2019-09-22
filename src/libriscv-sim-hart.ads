@@ -32,27 +32,64 @@
 with LibRISCV.Sim.Memory_Bus;
 
 with LibRISCV.Except;
+with LibRISCV.CSR;
 
 private with LibRISCV.Instructions;
-private with LibRISCV.CSR;
 
 package LibRISCV.Sim.Hart
 with SPARK_Mode => On
 is
 
+   type Breakpoint_Number is range 0 .. 100;
+
    type Instance
-   is tagged private;
+     (Number_Of_Breakpoints : Breakpoint_Number := 1)
+   is tagged limited private;
 
    subtype Class is Instance'Class;
+   type Ptr is access all Class;
 
    procedure Reset (This : in out Instance);
 
    procedure Cycle (This : in out Instance;
                     Bus  : in out Sim.Memory_Bus.Class);
 
-   type State_Kind is (Reset, Running);
+   type State_Kind is (Running, Debug_Halt, Single_Step);
 
    function State (This : Instance) return State_Kind;
+
+   type Halt_Source_Kind is (None, Single_Step, Breakpoint, Watchpoint);
+
+   function Halt_Source (This : in out Instance) return Halt_Source_Kind
+     with Pre => This.State = Debug_Halt;
+
+   procedure Halt (This : in out Instance)
+     with Post => This.State = Debug_Halt;
+
+   procedure Resume (This : in out Instance)
+     with Pre => This.State = Debug_Halt;
+
+   procedure Single_Step (This : in out Instance)
+     with Post => This.State = Single_Step;
+
+   function Read_GPR (This : Instance; Id : GPR_Id) return Register;
+   procedure Write_GPR (This : in out Instance; Id : GPR_Id; Value : Register);
+
+   function Read_PC (This : Instance) return Register;
+   procedure Write_PC (This : in out Instance; Addr : Register);
+
+   procedure Set_Debugger_Attached (This     : in out Instance;
+                                    Attached : Boolean := True);
+
+   function Debug_Read_CSR (This : Instance; Id : CSR.Id) return Register;
+
+   procedure Add_Breakpoint (This    : in out Instance;
+                             Addr    :        Address;
+                             Success :    out Boolean);
+
+   procedure Remove_Breakpoint (This    : in out Instance;
+                                Addr    :        Address;
+                                Success :    out Boolean);
 
    procedure Dump (This : Instance);
 
@@ -67,10 +104,19 @@ private
    type GPR_Array is array (GPR_Id) of Register;
    type CSR_Array is array (CSR.Name) of Register;
 
+   type Breakpoint_Rec is record
+      Enabled : Boolean := False;
+      Addr    : Address;
+   end record;
+
+   type Breakpoint_Array is array (Breakpoint_Number range <>) of Breakpoint_Rec;
+
    type Instance
-   is tagged record
+     (Number_Of_Breakpoints : Breakpoint_Number := 1)
+   is tagged limited record
       Privilege : Privilege_Level := Machine;
-      State     : State_Kind := Reset;
+      State     : State_Kind := Debug_Halt;
+      Halt_Src  : Halt_Source_Kind := None;
       PC        : Register;
       Next_PC   : Register;
 
@@ -79,6 +125,9 @@ private
 
       GPR   : GPR_Array;
       CSRs : CSR_Array;
+
+      Debugger_Attached : Boolean := False;
+      Breakpoints       : Breakpoint_Array (1 .. Number_Of_Breakpoints);
    end record
      with Type_Invariant => Instance.GPR (0).U = 0;
 

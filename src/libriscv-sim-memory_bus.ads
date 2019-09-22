@@ -38,6 +38,7 @@ is
    is tagged private;
 
    subtype Class is Instance'Class;
+   type Ptr is access all Class;
 
    type Access_Result is (Success, Failure);
 

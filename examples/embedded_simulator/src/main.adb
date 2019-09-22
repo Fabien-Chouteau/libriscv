@@ -56,6 +56,7 @@ procedure Main is
 begin
 
    SOC.Reset;
+   SOC.Resume;
 
    Bus.Set_Tohost (16#E000_0000#);
    Bus.Enable_HTIF;

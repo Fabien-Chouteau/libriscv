@@ -30,17 +30,19 @@
 ------------------------------------------------------------------------------
 
 with LibRISCV.Sim.Memory_Bus;
-
-private with LibRISCV.Sim.Hart;
+with LibRISCV.Sim.Hart;
 
 package LibRISCV.Sim.Platform
 with SPARK_Mode => On
 is
 
-   type Instance (Hart_Count : Positive)
-   is tagged private;
+   type Hart_Id is new Positive;
+
+   type Instance (Hart_Count : Hart_Id)
+   is tagged limited private;
 
    subtype Class is Instance'Class;
+   type Ptr is access all Class;
 
    procedure Reset (This : in out Instance);
 
@@ -51,14 +53,21 @@ is
 
    function State (This : Instance) return State_Kind;
 
+   procedure Resume (This : in out Instance);
+
+   function Get_Hart (This : in out Instance;
+                      Id   : Hart_Id)
+                      return not null Hart.Ptr
+   with Pre => Id in 1 .. This.Hart_Count;
+
    procedure Dump (This : Instance);
 
 private
 
-   type Hart_Array is array (Positive range <>) of Sim.Hart.Instance;
+   type Hart_Array is array (Hart_Id range <>) of aliased Sim.Hart.Instance;
 
-   type Instance (Hart_Count : Positive)
-   is tagged record
+   type Instance (Hart_Count : Hart_Id)
+   is tagged limited record
       State : State_Kind := Reset;
       Harts : Hart_Array (1 .. Hart_Count);
    end record;
