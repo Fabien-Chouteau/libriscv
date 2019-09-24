@@ -7,6 +7,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - uses: Fabien-Chouteau/setup-ada@dev
+      with:
         distrib: community
         target: native
     - uses: Fabien-Chouteau/setup-ada@dev
