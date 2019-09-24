@@ -15,6 +15,7 @@ jobs:
       with:
         distrib: community
         target: riscv32-elf
+    - run: sudo apt-get install -y binutils-dev
     - run: make -C examples/simulator all
     - run: make -C examples/simulator test
     - run: make -C examples/embedded_simulator all
